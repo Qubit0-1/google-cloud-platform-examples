@@ -1,0 +1,29 @@
+{
+  "kind": "Pod",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "{tagname}",
+    "labels": {
+      "name": "{tagname}",
+      "role": "mongo"
+    }
+  },
+  "spec": {
+	"restartPolicy": "Never",
+    "containers": [
+      {
+        "name": "{tagname}",
+        "image": "mongo:3.0.6",
+        "ports": [
+          {
+            "name": "mongo",
+            "containerPort": 27017
+          }
+        ],
+		"command": ["/bin/sh","-c"],
+    	"args": ["mongos --configdb {config-servers}"]
+      }
+    ]
+  }
+}
+

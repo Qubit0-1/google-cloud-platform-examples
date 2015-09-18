@@ -1,0 +1,44 @@
+{
+  "kind": "Pod",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "{tagname}",
+    "labels": {
+      "name": "{tagname}",
+      "role": "mongo"
+    }
+  },
+  "spec": {
+	"restartPolicy": "Never",
+    "volumes": [
+      {
+        "name": "mongo-disk",
+        "gcePersistentDisk": {
+          "pdName": "disk-{tagname}",
+          "fsType": "ext4"
+        }
+      }
+    ],
+    "containers": [
+      {
+        "name": "{tagname}",
+        "image": "mongo:3.0.6",
+        "ports": [
+          {
+            "name": "mongo",
+            "containerPort": 27017
+          }
+        ],
+		"command": ["/bin/sh","-c"],
+    	"args": ["/entrypoint.sh --smallfiles --replSet {replica-name}"],
+        "volumeMounts": [
+          {
+            "name": "mongo-disk",
+            "mountPath": "/data/db"
+          }
+        ]
+      }
+    ]
+  }
+}
+

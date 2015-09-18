@@ -1,0 +1,22 @@
+{
+   "kind":"Service",
+   "apiVersion":"v1",
+   "metadata":{
+      "name":"{tagname}",
+      "labels":{
+         "name":"{tagname}"
+      }
+   },
+   "spec":{
+      "ports": [
+        {
+          "port":27019,
+          "targetPort":27019,
+          "protocol":"TCP"
+        }
+      ],
+      "selector":{
+         "name":"{tagname}"
+      }
+   }
+}

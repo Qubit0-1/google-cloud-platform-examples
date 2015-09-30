@@ -19,18 +19,23 @@ function create_disk
 {
 	for element in "${array[@]}"
 	do
-		EXEC_SCRIPT="gcloud compute disks create --size 500GB disk-$element"
+		EXEC_SCRIPT="gcloud compute disks create --size 250GB disk-$element"
+		# --type pd-ssd
 		exec_cmd
 	done
 }
 
 function delete_disk
 {
+	DISKS=""
+	
 	for element in "${array[@]}"
 	do
-		EXEC_SCRIPT="gcloud compute disks delete disk-$element -q"
-		exec_cmd
+		DISKS="$DISKS disk-$element"
 	done
+
+	EXEC_SCRIPT="gcloud compute disks delete $DISKS -q"
+	exec_cmd
 }
 
 function create_replica_set
@@ -41,12 +46,14 @@ function create_replica_set
 	mg_c="${array[3]}"
 	
 	# prepare pods magnifest file
-	sed "s/{tagname}/$mg_a/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" > ./tmp-ws/pod-$mg_a.json
-	sed "s/{tagname}/$mg_b/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" > ./tmp-ws/pod-$mg_b.json
-	sed "s/{tagname}/$mg_c/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" > ./tmp-ws/pod-$mg_c.json
+	sed "s/{tagname}/$mg_a/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" | sed "s/\"mg-role\": \"rs-x\"/\"mg-role\": \"rs-a\"/g" > ./tmp-ws/pod-$mg_a.json
+	sed "s/{tagname}/$mg_b/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" | sed "s/\"mg-role\": \"rs-x\"/\"mg-role\": \"rs-b\"/g" > ./tmp-ws/pod-$mg_b.json
+	sed "s/{tagname}/$mg_c/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" | sed "s/\"mg-role\": \"rs-x\"/\"mg-role\": \"rs-c\"/g" > ./tmp-ws/pod-$mg_c.json
 	
 	# prepare service magnifest file
 	sed "s/{tagname}/$mg_a/g" ./templates/svc-member-{tagname}.json > ./tmp-ws/svc-$mg_a.json
+	sed "s/{tagname}/$mg_b/g" ./templates/svc-member-{tagname}.json > ./tmp-ws/svc-$mg_b.json
+	sed "s/{tagname}/$mg_c/g" ./templates/svc-member-{tagname}.json > ./tmp-ws/svc-$mg_c.json
 	
 	EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$mg_a.json"
 	exec_cmd
@@ -60,8 +67,6 @@ function create_replica_set
 	exec_cmd
 	EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$mg_c.json"
 	exec_cmd
-	
-	echo "todo todo..."
 }
 
 
@@ -82,12 +87,34 @@ function delete_container
 
 function create_config_server
 {
-	echo "todo todo..."
+	for element in "${array[@]}"
+	do
+		# prepare pods magnifest file
+		sed "s/{tagname}/$element/g" ./templates/pod-config-{tagname}.json > ./tmp-ws/pod-$element.json
+	
+		# prepare service magnifest file
+		sed "s/{tagname}/$element/g" ./templates/svc-config-{tagname}.json > ./tmp-ws/svc-$element.json
+	
+		EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$element.json"
+		exec_cmd
+		EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$element.json"
+		exec_cmd
+	done
 }
 
 function create_router
 {
-	echo "todo todo..."
+	mg_name="${array[0]}"
+	conf_servers="${array[1]},${array[2]},${array[3]}"
+	
+	# prepare magnifest file
+	sed "s/{tagname}/$mg_name/g" ./templates/pod-router-{tagname}.json | sed "s/{config-servers}/$conf_servers/g" > ./tmp-ws/pod-$mg_name.json
+	sed "s/{tagname}/$mg_name/g" ./templates/svc-router-{tagname}.json > ./tmp-ws/svc-$mg_name.json
+	
+	EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$mg_name.json"
+	exec_cmd
+	EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$mg_name.json"
+	exec_cmd
 }
 
 function clean

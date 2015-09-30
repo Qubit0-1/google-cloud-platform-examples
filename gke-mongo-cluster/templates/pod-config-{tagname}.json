@@ -10,6 +10,9 @@
   },
   "spec": {
 	"restartPolicy": "Never",
+	"nodeSelector": {
+	  "mg-role": "config"
+	},
     "volumes": [
       {
         "name": "mongo-disk",

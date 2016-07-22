@@ -32,6 +32,8 @@ function install_opt_software
   apt-get update -y
   apt-get install -y gcsfuse
   mkdir -p /opt/shared
+  
+  apt-get install -y git
 
   echo "installed opt software done." > /root/opt-installed
   echo `date` >> /root/opt-installed
@@ -53,13 +55,22 @@ function install_opt_smack
 {
   # cassandra
   mkdir -p /opt/cassandra
-  cp /opt/shared/apache-cassandra-3.0.2-bin.tar.gz /opt/cassandra/
+  mkdir -p /opt/disk/lssd/cax-data/commitlog
+  mkdir -p /opt/disk/lssd/cax-data/data
+  mkdir -p /opt/disk/lssd/cax-data/saved_caches
+  
+  cp /opt/shared/apache-cassandra-3.3-bin.tar.gz /opt/cassandra/
   cd /opt/cassandra/
-  tar zxvf apache-cassandra-3.0.2-bin.tar.gz 
-  ln -s /opt/cassandra/apache-cassandra-3.0.2 /opt/cassandra/current
+  tar zxvf apache-cassandra-3.3-bin.tar.gz
+  ln -s /opt/cassandra/apache-cassandra-3.3 /opt/cassandra/current
   echo 'export CASSANDRA_HOME="/opt/cassandra/current"' >> /etc/profile.d/cassandra.sh
   echo 'export PATH="$PATH:$CASSANDRA_HOME/bin"' >> /etc/profile.d/cassandra.sh
   chmod 755 /etc/profile.d/cassandra.sh
+  cp -f /opt/shared/cassandra.yaml /opt/cassandra/current/conf/
+  # set the 2 seeds' ip address in cassandra.yaml
+  SEED_IP=`getent hosts mesos-slave-1 | awk '{ print $1 }'`; sed -i "s/seed1_ip_addr/$SEED_IP/g" /opt/cassandra/current/conf/cassandra.yaml
+  SEED_IP=`getent hosts mesos-slave-2 | awk '{ print $1 }'`; sed -i "s/seed2_ip_addr/$SEED_IP/g" /opt/cassandra/current/conf/cassandra.yaml
+  MY_IP=`ifconfig eth0 | awk '/inet addr/{print substr($2,6)}'`; sed -i "s/my_ip_address/$MY_IP/g" /opt/cassandra/current/conf/cassandra.yaml  
 
   # scala
   mkdir -p /opt/scala
@@ -82,6 +93,17 @@ function install_opt_smack
   echo 'export PATH="$PATH:$SBT_HOME/bin"' >> /etc/profile.d/scala.sh
   # trigger sbt downloading
   # /opt/sbt/current/bin/sbt about
+  
+  # spark
+  mkdir -p /opt/spark
+  cp /opt/shared/spark-1.6.0-bin-hadoop2.6.tgz /opt/spark/
+  cd /opt/spark/
+  tar zxvf spark-1.6.0-bin-hadoop2.6.tgz
+  ln -s /opt/spark/spark-1.6.0-bin-hadoop2.6 /opt/spark/current
+  echo 'export SPARK_HOME="/opt/spark/current"' >> /etc/profile.d/spark.sh
+  echo 'export PATH="$PATH:$SPARK_HOME/bin"' >> /etc/profile.d/spark.sh
+  chmod 755 /etc/profile.d/spark.sh
+  
 }
 
 function install_opt_mesosdns
@@ -91,6 +113,7 @@ function install_opt_mesosdns
   chmod 755 /opt/mesos-dns/mesos-dns-v0.5.1-linux-amd64
   ln -s /opt/mesos-dns/mesos-dns-v0.5.1-linux-amd64 /opt/mesos-dns/mesos-dns
   cp /opt/shared/mesos-dns-config.json /opt/mesos-dns/
+  MY_IP=`ifconfig eth0 | awk '/inet addr/{print substr($2,6)}'`; sed -i "s/listener_ip_addr/$MY_IP/g" /opt/mesos-dns/mesos-dns-config.json
 }
 
 function configure_zookeeper
@@ -138,6 +161,27 @@ function configure_mesos_slave
   start mesos-slave
 }
 
+function configure_slave_os
+{
+  # format & mount local-ssd
+  mkfs.ext4 -F /dev/disk/by-id/google-local-ssd-0 
+  mkdir -p /opt/disk/lssd
+  mount -o discard,defaults /dev/disk/by-id/google-local-ssd-0 /opt/disk/lssd
+  
+  # adjust os parameters
+  echo 8 > /sys/class/block/sdb/queue/read_ahead_kb
+  echo "root - memlock unlimited" | tee -a /etc/security/limits.conf
+  echo "root - nofile 100000" | tee -a /etc/security/limits.conf
+  echo "root - nproc 32768" | tee -a /etc/security/limits.conf
+  echo "root - as unlimited" | tee -a /etc/security/limits.conf
+  echo "vm.max_map_count = 131072" | tee -a /etc/sysctl.conf
+  sysctl -p
+
+  # check the cax process limits: 
+  # cat /proc/<pid>/limits
+  
+}
+
 if [ -f "/root/opt-installed" ]; then
   echo "installed opt software."
   init_opt_boot
@@ -146,17 +190,19 @@ elif [[ $HOSTNAME == *"master"* ]]; then
   install_opt_software
   install_opt_mesos_master
   init_opt_boot
-  install_opt_mesosdns
   configure_zookeeper
   configure_mesos_master
+  install_opt_mesosdns
 
   install_opt_smack
 elif [[ $HOSTNAME == *"slave"* ]]; then
   echo "install for role:slave"
+  configure_slave_os
   install_opt_software
   install_opt_mesos_slave
   init_opt_boot
   configure_mesos_slave
+  install_opt_mesosdns
   
   install_opt_smack
 else

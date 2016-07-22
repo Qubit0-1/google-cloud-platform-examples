@@ -1,0 +1,10 @@
+{
+    "id": "hello-100-times",
+    "cmd": "cnt=1; while [ $cnt -le 100 ]; do echo Hello $cnt times; sleep 3; cnt=`expr $cnt + 1`; done",
+    "mem": 32,
+    "cpus": 0.3,
+    "instances": 1,
+    "disk": 0.0,
+    "ports": [0]
+}
+

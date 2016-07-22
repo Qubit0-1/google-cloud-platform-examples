@@ -1,0 +1,9 @@
+{
+    "id": "cassandra",
+    "cmd": "/opt/cassandra/current/bin/cassandra -f -R",
+    "mem": 4096,
+    "cpus": 2,
+    "instances": 3,
+    "constraints": [["hostname", "UNIQUE"]]
+}
+

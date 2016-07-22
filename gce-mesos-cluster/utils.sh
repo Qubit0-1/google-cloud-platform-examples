@@ -21,7 +21,7 @@ function create_master
 	for element in "${array[@]}"
 	do
     EXEC_SCRIPT="gcloud compute --project \"$ARG_PROJECT_ID\" instances create \"$element\""
-    EXEC_SCRIPT="$EXEC_SCRIPT --zone \"asia-east1-b\" --machine-type \"n1-standard-1\""
+    EXEC_SCRIPT="$EXEC_SCRIPT --zone \"asia-east1-b\" --machine-type \"n1-standard-2\""
     EXEC_SCRIPT="$EXEC_SCRIPT --network \"default\" --maintenance-policy \"MIGRATE\""
     EXEC_SCRIPT="$EXEC_SCRIPT --scopes \"https://www.googleapis.com/auth/cloud-platform\""
     EXEC_SCRIPT="$EXEC_SCRIPT --image \"https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/ubuntu-1404-trusty-v20151113\""
@@ -37,12 +37,13 @@ function create_slave
 	for element in "${array[@]}"
 	do
     EXEC_SCRIPT="gcloud compute --project \"$ARG_PROJECT_ID\" instances create \"$element\""
-    EXEC_SCRIPT="$EXEC_SCRIPT --zone \"asia-east1-b\" --machine-type \"n1-standard-2\""
+    EXEC_SCRIPT="$EXEC_SCRIPT --zone \"asia-east1-b\" --machine-type \"n1-standard-8\""
     EXEC_SCRIPT="$EXEC_SCRIPT --network \"default\" --maintenance-policy \"MIGRATE\""
     EXEC_SCRIPT="$EXEC_SCRIPT --scopes \"https://www.googleapis.com/auth/cloud-platform\""
     EXEC_SCRIPT="$EXEC_SCRIPT --image \"https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/ubuntu-1404-trusty-v20151113\""
     EXEC_SCRIPT="$EXEC_SCRIPT --boot-disk-size \"200\" --boot-disk-type \"pd-standard\" --boot-disk-device-name \"disk-$element\""
-    EXEC_SCRIPT="$EXEC_SCRIPT --metadata-from-file startup-script=./init-vm-instance.sh &"
+    EXEC_SCRIPT="$EXEC_SCRIPT --metadata-from-file startup-script=./init-vm-instance.sh"
+    EXEC_SCRIPT="$EXEC_SCRIPT --local-ssd interface=\"SCSI\" &"
 
 		exec_cmd
 	done
@@ -62,69 +63,26 @@ function delete_vms
 	exec_cmd
 }
 
-function create_replica_set
-{
-	rs_set="${array[0]}"
-	mg_a="${array[1]}"
-	mg_b="${array[2]}"
-	mg_c="${array[3]}"
-	
-	# prepare pods magnifest file
-	sed "s/{tagname}/$mg_a/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" | sed "s/\"mg-role\": \"rs-x\"/\"mg-role\": \"rs-a\"/g" > ./tmp-ws/pod-$mg_a.json
-	sed "s/{tagname}/$mg_b/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" | sed "s/\"mg-role\": \"rs-x\"/\"mg-role\": \"rs-b\"/g" > ./tmp-ws/pod-$mg_b.json
-	sed "s/{tagname}/$mg_c/g" ./templates/pod-member-{tagname}.json | sed "s/--replSet {replica-name}/--replSet $rs_set/g" | sed "s/\"mg-role\": \"rs-x\"/\"mg-role\": \"rs-c\"/g" > ./tmp-ws/pod-$mg_c.json
-	
-	# prepare service magnifest file
-	sed "s/{tagname}/$mg_a/g" ./templates/svc-member-{tagname}.json > ./tmp-ws/svc-$mg_a.json
-	sed "s/{tagname}/$mg_b/g" ./templates/svc-member-{tagname}.json > ./tmp-ws/svc-$mg_b.json
-	sed "s/{tagname}/$mg_c/g" ./templates/svc-member-{tagname}.json > ./tmp-ws/svc-$mg_c.json
-	
-	EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$mg_a.json"
-	exec_cmd
-	EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$mg_b.json"
-	exec_cmd
-	EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$mg_c.json"
-	exec_cmd
-	EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$mg_a.json"
-	exec_cmd
-	EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$mg_b.json"
-	exec_cmd
-	EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$mg_c.json"
-	exec_cmd
-}
-
-
-function delete_container
+function set_slave_dns
 {
 	for element in "${array[@]}"
 	do
-		EXEC_SCRIPT="kubectl delete services $element"
-		exec_cmd
-		
-		sleep 1
-		
-		EXEC_SCRIPT="kubectl delete pods $element"
+    S="gcloud compute ssh $element"
+    S="$S"$' $\'sudo sed -i \\\'/nameserver/d\\\' /etc/resolvconf/resolv.conf.d/head\' &&'
+    S="$S gcloud compute ssh $element"
+    S="$S"$' $\'getent hosts mesos-slave-1 | awk \\\'{ print "nameserver "$1 }\\\' | sudo tee -a /etc/resolvconf/resolv.conf.d/head\' &&'
+    S="$S gcloud compute ssh $element"
+    S="$S"$' $\'sudo resolvconf -u\''
+#    EXEC_SCRIPT=$EXEC_SCRIPT $'gcloud compute ssh '$element$' $\'getent hosts mesos-slave-1 | awk \\\'{ print "nameserver "$1 }\\\' | sudo tee -a /etc/resolvconf/resolv.conf.d/head\''
+
+#gcloud compute ssh mesos-slave-2 $'sudo resolvconf -u'
+
+#		EXEC_SCRIPT="kubectl delete services $element"
+    EXEC_SCRIPT="$S"
 		exec_cmd
 	done
 }
 
-
-function create_config_server
-{
-	for element in "${array[@]}"
-	do
-		# prepare pods magnifest file
-		sed "s/{tagname}/$element/g" ./templates/pod-config-{tagname}.json > ./tmp-ws/pod-$element.json
-	
-		# prepare service magnifest file
-		sed "s/{tagname}/$element/g" ./templates/svc-config-{tagname}.json > ./tmp-ws/svc-$element.json
-	
-		EXEC_SCRIPT="kubectl create -f ./tmp-ws/pod-$element.json"
-		exec_cmd
-		EXEC_SCRIPT="kubectl create -f ./tmp-ws/svc-$element.json"
-		exec_cmd
-	done
-}
 
 function create_router
 {
@@ -207,6 +165,8 @@ elif [ "$ARG_CMD" = "create-slave" ]; then
   create_slave
 elif [ "$ARG_CMD" = "delete-vms" ]; then
   delete_vms
+elif [ "$ARG_CMD" = "set-slave-dns" ]; then  
+  set_slave_dns
 # elif [ "$ARG_CMD" = "create_router" ]; then
 #   create_router
 # elif [ "$ARG_CMD" = "delete_disk" ]; then
